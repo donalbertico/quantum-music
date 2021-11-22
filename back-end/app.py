@@ -8,48 +8,78 @@ app = Flask(__name__)
 cors = CORS(app)
 app.config['CORS_HEADERS'] = 'Content_Type'
 
-classes = {}
+totalClasses = {}
 for folder in os.walk('./static/assetNames'):
     for file in folder[2]:
         with open('./static/assetNames/'+file, newline='') as csvfile:
-            classes[file] = np.array(list(csv.reader(csvfile)))[0]
+            totalClasses[file] = np.array(list(csv.reader(csvfile)))[0]
 i=0
-classNames = ["" for className in classes]
-for var in classes:
+classNames = ["" for className in totalClasses]
+for var in totalClasses:
     classNames[i] = var
     i += 1
+
+def getSamples(type, num):
+    count = 0
+    index = np.zeros(num)
+    samples = ["" for i in index]
+    for i in index:
+        repeat = True
+        while repeat:
+            possible = np.random.choice(totalClasses[type])
+            if np.isin(possible,samples) :
+                repeat = True
+            else :
+                repeat = False
+                samples[count] = possible
+        count += 1
+    return samples
 
 @app.route('/next')
 def get_next():
     prob1 = request.args.get('prob')
     length = request.args.get('length')
-    if(prob1 is None): return "probability required",400
-    if(length is None): length = 1
+    assets = request.args.get('assets')
+    soundSamples = 36
+    if prob1 is None : return "probability required",400
+    if length is None : length = 1
+    if assets is None : assets = []
+    else : assets = assets.split(',')
 
     prob1 = int(prob1)
-    print('a ver',prob1,length)
     prob2 = 100-int(prob1)
-    totalSamples = (length*60)+3
-    clSamples = int((prob1*totalSamples)/100)
-    stSamples = int((prob2*totalSamples)/100)
-    clChances = np.zeros(clSamples)
-    stChances = np.ones(stSamples)
+    totalSamples = (length*60)+5
+    sounds = int((prob1*totalSamples)/100)
+    silences = int((prob2*totalSamples)/100)
+    soundChances = np.zeros(sounds)
+    silenceChances = np.ones(silences)
 
-    chances = np.concatenate([clChances,stChances])
+    chances = np.concatenate([soundChances,silenceChances])
     np.random.shuffle(chances)
     output = ["" for chance in chances]
     binary = ["" for chance in chances]
 
+    possibleClasses = []
+    if len(assets) > 0 :
+        samplesPerClass = int(soundSamples/len(assets))
+        for asset in assets:
+            print('asssettt',asset)
+            if asset == 'cl' :
+                possibleClasses = np.concatenate([possibleClasses,getSamples('clarinet.csv',samplesPerClass)])
+            elif asset == 'st' :
+                possibleClasses = np.concatenate([possibleClasses,getSamples('strings.csv',samplesPerClass)])
+    else :
+        possibleClasses = getSamples('clarinet.csv',soundSamples)
+
     i=0
     for chance in chances:
-        repeat = True
         binary[i] = chance
-        while repeat:
-            possible = np.random.choice(classes[classNames[int(chance)]])
-            if np.isin(possible,chances):
-                repeat = True
-            else :
-                output[i] = possible
-                repeat = False
+        if chance :
+            output[i] = np.random.choice(totalClasses['silences.csv'])
+        else :
+            output[i] = np.random.choice(possibleClasses)
         i += 1
+
+    print(output)
+
     return jsonify({"ids": output,"binary":binary})
